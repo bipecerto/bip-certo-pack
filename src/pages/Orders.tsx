@@ -1,170 +1,191 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { Plus, ShoppingCart } from "lucide-react";
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ShoppingCart, Search, RefreshCw, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useApp } from '@/contexts/AppContext';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
-interface Order {
+interface OrderRow {
   id: string;
-  marketplace: string | null;
-  external_order_id: string | null;
+  external_order_id: string;
+  marketplace: string;
   customer_name: string | null;
+  address_summary: string | null;
   status: string;
   created_at: string;
+  packages: { id: string; scan_code: string | null; status: string }[];
 }
 
+const MKT_COLOR: Record<string, string> = {
+  shopee: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  aliexpress: 'bg-red-500/10 text-red-400 border-red-500/20',
+  shein: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+};
+
+const MARKETPLACE_FILTERS = ['all', 'shopee', 'aliexpress', 'shein'];
+
 export default function OrdersPage() {
-  const { companyId } = useAuth();
-  const { toast } = useToast();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [filterMarketplace, setFilterMarketplace] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({
-    marketplace: "",
-    external_order_id: "",
-    customer_name: "",
-    address_summary: "",
-  });
+  const { profile } = useApp();
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [mktFilter, setMktFilter] = useState('all');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const fetchOrders = async () => {
-    if (!companyId) return;
-    let q = supabase.from("orders").select("*").order("created_at", { ascending: false });
-    if (filterMarketplace !== "all") q = q.eq("marketplace", filterMarketplace);
-    if (filterStatus !== "all") q = q.eq("status", filterStatus);
-    const { data } = await q;
-    setOrders(data || []);
-  };
+  const load = useCallback(async () => {
+    if (!profile?.company_id) return;
+    setLoading(true);
+    try {
+      const db = supabase();
+      let q = db
+        .from('orders')
+        .select(`
+          id, external_order_id, marketplace, customer_name, address_summary, status, created_at,
+          packages(id, scan_code, status)
+        `)
+        .eq('company_id', profile.company_id)
+        .order('created_at', { ascending: false })
+        .limit(200);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [companyId, filterMarketplace, filterStatus]);
+      if (mktFilter !== 'all') q = q.eq('marketplace', mktFilter);
+      if (search.trim()) {
+        q = q.or(
+          `external_order_id.ilike.%${search.trim()}%,customer_name.ilike.%${search.trim()}%`
+        );
+      }
 
-  const handleCreate = async () => {
-    if (!companyId) return;
-    const { error } = await supabase.from("orders").insert({
-      company_id: companyId,
-      ...form,
-    });
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Pedido criado" });
-      setDialogOpen(false);
-      setForm({ marketplace: "", external_order_id: "", customer_name: "", address_summary: "" });
-      fetchOrders();
+      const { data, error } = await q;
+      if (error) throw error;
+      setOrders(data as unknown as OrderRow[]);
+    } catch (err) {
+      toast.error('Erro ao carregar pedidos.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [profile?.company_id, mktFilter, search]);
+
+  useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Pedidos</h1>
-          <p className="text-muted-foreground">{orders.length} pedidos</p>
+          <h2 className="text-xl font-semibold text-white">Pedidos</h2>
+          <p className="text-slate-400 text-sm mt-0.5">{orders.length} pedido(s)</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="h-4 w-4" /> Novo Pedido</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Criar Pedido</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label>Marketplace</Label>
-                <Select value={form.marketplace} onValueChange={(v) => setForm({ ...form, marketplace: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Shopee">Shopee</SelectItem>
-                    <SelectItem value="AliExpress">AliExpress</SelectItem>
-                    <SelectItem value="Shein">Shein</SelectItem>
-                    <SelectItem value="Outro">Outro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>ID do Pedido (externo)</Label>
-                <Input value={form.external_order_id} onChange={(e) => setForm({ ...form, external_order_id: e.target.value })} />
-              </div>
-              <div>
-                <Label>Cliente</Label>
-                <Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
-              </div>
-              <div>
-                <Label>Endereço resumido</Label>
-                <Input value={form.address_summary} onChange={(e) => setForm({ ...form, address_summary: e.target.value })} />
-              </div>
-              <Button onClick={handleCreate} className="w-full">Criar</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={load} variant="ghost" size="sm" className="text-slate-400 hover:text-white hover:bg-slate-800">
+          <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+        </Button>
       </div>
 
-      <div className="flex gap-3">
-        <Select value={filterMarketplace} onValueChange={setFilterMarketplace}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Marketplace" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="Shopee">Shopee</SelectItem>
-            <SelectItem value="AliExpress">AliExpress</SelectItem>
-            <SelectItem value="Shein">Shein</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="received">Recebido</SelectItem>
-            <SelectItem value="packed">Empacotado</SelectItem>
-            <SelectItem value="shipped">Enviado</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Marketplace</TableHead>
-                <TableHead>ID Externo</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Data</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((o) => (
-                <TableRow key={o.id}>
-                  <TableCell><Badge variant="outline">{o.marketplace || "—"}</Badge></TableCell>
-                  <TableCell className="font-mono text-sm">{o.external_order_id || "—"}</TableCell>
-                  <TableCell>{o.customer_name || "—"}</TableCell>
-                  <TableCell><Badge variant="secondary">{o.status}</Badge></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {new Date(o.created_at).toLocaleDateString("pt-BR")}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {orders.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    Nenhum pedido encontrado
-                  </TableCell>
-                </TableRow>
+      {/* Filters */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && load()}
+            placeholder="Buscar por ID do pedido ou cliente..."
+            className="pl-9 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+          />
+        </div>
+        <div className="flex gap-2">
+          {MARKETPLACE_FILTERS.map((m) => (
+            <button
+              key={m}
+              onClick={() => setMktFilter(m)}
+              className={cn(
+                'text-xs font-semibold px-3 py-1.5 rounded-full border transition-all capitalize',
+                mktFilter === m
+                  ? (m === 'all' ? 'bg-indigo-600 border-indigo-500 text-white' : MKT_COLOR[m] + ' ring-1 ring-current')
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            >
+              {m === 'all' ? 'Todos' : m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* List */}
+      {loading ? (
+        <div className="flex justify-center py-10">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="text-center py-16">
+          <ShoppingCart className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+          <p className="text-slate-500">Nenhum pedido encontrado.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {orders.map((order) => {
+            const expanded = expandedId === order.id;
+            return (
+              <div key={order.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setExpandedId(expanded ? null : order.id)}
+                  className="w-full p-4 text-left flex items-center gap-3 hover:bg-slate-800/40 transition-colors"
+                >
+                  <ShoppingCart className="w-5 h-5 text-slate-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm text-white">{order.external_order_id}</span>
+                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', MKT_COLOR[order.marketplace] || 'bg-slate-700 text-slate-400')}>
+                        {order.marketplace.toUpperCase()}
+                      </span>
+                      {order.packages?.length > 0 && (
+                        <span className="text-xs text-slate-500">{order.packages.length} pacote(s)</span>
+                      )}
+                    </div>
+                    {order.customer_name && (
+                      <p className="text-xs text-slate-400 mt-0.5">{order.customer_name}</p>
+                    )}
+                  </div>
+                  {expanded ? (
+                    <ChevronUp className="w-4 h-4 text-slate-600 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-600 shrink-0" />
+                  )}
+                </button>
+
+                {expanded && (
+                  <div className="px-4 pb-4 border-t border-slate-800 pt-3 space-y-3">
+                    {order.address_summary && (
+                      <p className="text-xs text-slate-400">📍 {order.address_summary}</p>
+                    )}
+                    {order.packages?.length > 0 && (
+                      <div>
+                        <p className="text-xs text-slate-500 mb-2">Pacotes:</p>
+                        <div className="space-y-1">
+                          {order.packages.map((pkg) => (
+                            <button
+                              key={pkg.id}
+                              onClick={() => navigate(`/package/${pkg.id}`)}
+                              className="w-full flex items-center justify-between px-3 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+                            >
+                              <span className="font-mono text-xs text-white">{pkg.scan_code || 'Sem código'}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-400">{pkg.status}</span>
+                                <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

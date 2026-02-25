@@ -1,17 +1,23 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { Plus, Package } from "lucide-react";
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Package, Search, RefreshCw, ChevronRight } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useApp } from '@/contexts/AppContext';
+import { setCache, getCache, CACHE_KEYS } from '@/lib/cache';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+
+type StatusFilter = 'all' | 'packed' | 'checking' | 'shipped' | 'cancelled';
+
+const STATUS_CONFIG = {
+  all: { label: 'Todos', color: 'bg-slate-700 text-slate-300 border-slate-600' },
+  packed: { label: 'Embalado', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  checking: { label: 'Em Conferência', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  shipped: { label: 'Enviado', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  cancelled: { label: 'Cancelado', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+};
 
 interface PkgRow {
   id: string;
@@ -20,175 +26,137 @@ interface PkgRow {
   status: string;
   package_number: number;
   last_scanned_at: string | null;
-  order_id: string;
-  external_order_id?: string | null;
+  created_at: string;
+  order: { external_order_id: string; customer_name: string | null; marketplace: string } | null;
 }
 
 export default function PackagesPage() {
-  const { companyId } = useAuth();
-  const { toast } = useToast();
+  const { profile, packagesTick } = useApp();
   const navigate = useNavigate();
   const [packages, setPackages] = useState<PkgRow[]>([]);
-  const [search, setSearch] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [orders, setOrders] = useState<{ id: string; external_order_id: string | null }[]>([]);
-  const [form, setForm] = useState({ order_id: "", scan_code: "", tracking_code: "", package_number: 1 });
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  const fetchPackages = async () => {
-    if (!companyId) return;
-    const { data } = await supabase
-      .from("packages")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const load = useCallback(async () => {
+    if (!profile?.company_id) return;
+    setLoading(true);
+    try {
+      const db = supabase();
+      let q = db
+        .from('packages')
+        .select('id, scan_code, tracking_code, status, package_number, last_scanned_at, created_at, order:orders(external_order_id, customer_name, marketplace)')
+        .eq('company_id', profile.company_id)
+        .order('created_at', { ascending: false })
+        .limit(200);
 
-    if (data) {
-      const enriched: PkgRow[] = [];
-      for (const p of data) {
-        const { data: order } = await supabase
-          .from("orders")
-          .select("external_order_id")
-          .eq("id", p.order_id)
-          .single();
-        enriched.push({ ...p, external_order_id: order?.external_order_id });
+      if (statusFilter !== 'all') q = q.eq('status', statusFilter);
+      if (search.trim()) {
+        q = q.or(`scan_code.ilike.%${search.trim()}%,tracking_code.ilike.%${search.trim()}%`);
       }
-      setPackages(enriched);
+
+      const { data, error } = await q;
+      if (error) throw error;
+      const rows = data as unknown as PkgRow[];
+      setPackages(rows);
+      setCache(CACHE_KEYS.PACKAGES, rows, 5 * 60 * 1000);
+    } catch {
+      const cached = getCache<PkgRow[]>(CACHE_KEYS.PACKAGES);
+      if (cached) { setPackages(cached); toast.warning('Exibindo dados em cache (offline).'); }
+      else toast.error('Erro ao carregar pacotes.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [profile?.company_id, statusFilter, search, packagesTick]);
 
-  const fetchOrders = async () => {
-    if (!companyId) return;
-    const { data } = await supabase.from("orders").select("id, external_order_id");
-    setOrders(data || []);
-  };
-
-  useEffect(() => {
-    fetchPackages();
-    fetchOrders();
-  }, [companyId]);
-
-  const handleCreate = async () => {
-    if (!companyId || !form.order_id) return;
-    const { error } = await supabase.from("packages").insert({
-      company_id: companyId,
-      order_id: form.order_id,
-      scan_code: form.scan_code || null,
-      tracking_code: form.tracking_code || null,
-      package_number: form.package_number,
-    });
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Pacote criado" });
-      setDialogOpen(false);
-      setForm({ order_id: "", scan_code: "", tracking_code: "", package_number: 1 });
-      fetchPackages();
-    }
-  };
-
-  const filtered = packages.filter((p) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      p.scan_code?.toLowerCase().includes(s) ||
-      p.tracking_code?.toLowerCase().includes(s) ||
-      p.external_order_id?.toLowerCase().includes(s)
-    );
-  });
+  useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Pacotes</h1>
-          <p className="text-muted-foreground">{packages.length} pacotes</p>
+          <h2 className="text-xl font-semibold text-white">Pacotes</h2>
+          <p className="text-slate-400 text-sm mt-0.5">{packages.length} pacote(s)</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="h-4 w-4" /> Novo Pacote</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Criar Pacote</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label>Pedido</Label>
-                <Select value={form.order_id} onValueChange={(v) => setForm({ ...form, order_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o pedido" /></SelectTrigger>
-                  <SelectContent>
-                    {orders.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.external_order_id || o.id.slice(0, 8)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Scan Code</Label>
-                <Input value={form.scan_code} onChange={(e) => setForm({ ...form, scan_code: e.target.value })} className="font-mono" />
-              </div>
-              <div>
-                <Label>Tracking Code</Label>
-                <Input value={form.tracking_code} onChange={(e) => setForm({ ...form, tracking_code: e.target.value })} className="font-mono" />
-              </div>
-              <div>
-                <Label>Número do pacote</Label>
-                <Input type="number" min={1} value={form.package_number} onChange={(e) => setForm({ ...form, package_number: Number(e.target.value) })} />
-              </div>
-              <Button onClick={handleCreate} className="w-full">Criar</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={load} variant="ghost" size="sm" className="text-slate-400 hover:text-white hover:bg-slate-800">
+          <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+        </Button>
       </div>
 
-      <Input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Buscar por scan_code, tracking ou pedido..."
-        className="max-w-md"
-      />
-
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Scan Code</TableHead>
-                <TableHead>Tracking</TableHead>
-                <TableHead>Pedido</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Último Scan</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((p) => (
-                <TableRow
-                  key={p.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/package/${p.id}`)}
-                >
-                  <TableCell>{p.package_number}</TableCell>
-                  <TableCell className="font-mono text-sm">{p.scan_code || "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{p.tracking_code || "—"}</TableCell>
-                  <TableCell className="text-sm">{p.external_order_id || "—"}</TableCell>
-                  <TableCell><Badge variant="secondary">{p.status}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {p.last_scanned_at ? new Date(p.last_scanned_at).toLocaleString("pt-BR") : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <Package className="mx-auto mb-2 h-8 w-8" />
-                    Nenhum pacote encontrado
-                  </TableCell>
-                </TableRow>
+      {/* Filters */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && load()}
+            placeholder="Buscar por scan_code ou tracking..."
+            className="pl-9 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(STATUS_CONFIG) as StatusFilter[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={cn(
+                'text-xs font-semibold px-3 py-1.5 rounded-full border transition-all',
+                statusFilter === s
+                  ? STATUS_CONFIG[s].color + ' ring-1 ring-current'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            >
+              {STATUS_CONFIG[s].label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* List */}
+      {loading ? (
+        <div className="flex justify-center py-10">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : packages.length === 0 ? (
+        <div className="text-center py-16">
+          <Package className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+          <p className="text-slate-500">Nenhum pacote encontrado.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {packages.map((pkg) => {
+            const cfg = STATUS_CONFIG[pkg.status as StatusFilter] || STATUS_CONFIG.packed;
+            return (
+              <button
+                key={pkg.id}
+                onClick={() => navigate(`/package/${pkg.id}`)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 text-left hover:border-indigo-500/40 hover:bg-slate-800/50 transition-all flex items-center gap-4"
+              >
+                <Package className="w-5 h-5 text-slate-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-sm text-white truncate">
+                      {pkg.scan_code || pkg.tracking_code || 'Sem código'}
+                    </span>
+                    <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', cfg.color)}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {pkg.order?.customer_name && <span>{pkg.order.customer_name} • </span>}
+                    {pkg.order?.external_order_id && <span className="font-mono">{pkg.order.external_order_id}</span>}
+                    {pkg.last_scanned_at && (
+                      <span> • {new Date(pkg.last_scanned_at).toLocaleString('pt-BR')}</span>
+                    )}
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
