@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scan, History, CheckCircle, XCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { getCache, setCache, CACHE_KEYS } from '@/lib/cache';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
@@ -32,7 +32,7 @@ function playBeep(type: 'success' | 'error') {
 }
 
 export default function ScannerPage() {
-  const { profile, packagesTick } = useApp();
+  const { profile } = useApp();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState('');
@@ -70,7 +70,7 @@ export default function ScannerPage() {
     setStatus('searching');
 
     try {
-      const db = supabase();
+      const db = supabase;
 
       // 1) Buscar por scan_code
       let { data: pkg } = await db

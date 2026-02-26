@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, MapPin, Tag, CheckCircle, Truck, XCircle, ClipboardCheck } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -77,7 +77,7 @@ export default function PackageDetails() {
         if (!id) return;
         setLoading(true);
         try {
-            const db = supabase();
+            const db = supabase;
             const { data, error } = await db
                 .from('packages')
                 .select(`
@@ -109,7 +109,7 @@ export default function PackageDetails() {
         if (!pkg || !profile?.company_id) return;
         setActionLoading(action);
         try {
-            const db = supabase();
+            const db = supabase;
             await db
                 .from('packages')
                 .update({ status: newStatus, last_scanned_at: new Date().toISOString() })
