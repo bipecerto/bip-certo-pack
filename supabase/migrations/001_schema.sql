@@ -124,9 +124,9 @@ create        index if not exists idx_products_name            on public.product
 create        index if not exists idx_imports_company          on public.imports(company_id, started_at desc);
 create        index if not exists idx_scans_package            on public.scans(package_id, created_at desc);
 
--- Unique constraint para evitar duplicação de pedidos
-create unique index if not exists idx_orders_unique
-  on public.orders(company_id, marketplace, external_order_id);
+-- Constraint única real para Supabase (permitindo ON CONFLICT)
+alter table public.orders drop constraint if exists orders_marketplace_external_order_id_key;
+alter table public.orders add constraint orders_marketplace_external_order_id_key unique (marketplace, external_order_id);
 
 -- Unique constraint para order_items
 create unique index if not exists idx_order_items_unique

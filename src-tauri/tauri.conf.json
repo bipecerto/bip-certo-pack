@@ -23,15 +23,7 @@
       "csp": null
     }
   },
-  "plugins": {
-    "store": {},
-    "fs": {
-      "scope": [
-        "**"
-      ]
-    },
-    "dialog": {}
-  },
+  "plugins": {},
   "bundle": {
     "active": true,
     "targets": "all",

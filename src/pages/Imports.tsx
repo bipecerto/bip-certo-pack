@@ -13,6 +13,10 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
+
+const isTauri = '__TAURI_INTERNALS__' in window;
 
 type Step = 'idle' | 'reading' | 'detecting' | 'parsing' | 'upserting' | 'done' | 'error';
 
@@ -159,6 +163,27 @@ export default function ImportsPage() {
     }
   }, [profile, user, navigate]);
 
+  const handleSelectFileClick = useCallback(async () => {
+    if (isTauri) {
+      try {
+        const selected = await open({
+          multiple: false,
+          filters: [{ name: 'CSV', extensions: ['csv'] }]
+        });
+        if (typeof selected === 'string') {
+          const bytes = await readFile(selected);
+          const name = selected.split(/[/\\]/).pop() || 'import.csv';
+          const file = new File([bytes], name, { type: 'text/csv' });
+          processFile(file);
+        }
+      } catch (err) {
+        toast.error('Erro ao ler arquivo local.');
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
+  }, [processFile]);
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -197,7 +222,7 @@ export default function ImportsPage() {
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={handleSelectFileClick}
           className={cn(
             'border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-200',
             isDragging

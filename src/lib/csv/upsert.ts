@@ -53,7 +53,7 @@ export async function upsertRows(
                         status: 'received',
                     },
                     {
-                        onConflict: 'company_id,marketplace,external_order_id',
+                        onConflict: 'marketplace,external_order_id',
                         ignoreDuplicates: false,
                     }
                 )
