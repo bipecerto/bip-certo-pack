@@ -1,9 +1,9 @@
 /**
- * upsert.ts — Lógica de UPSERT para os dados normalizados no Supabase.
+ * upsert.ts — Lógica de UPSERT para os dados normalizados.
  * Garante anti-duplicação e relatório de estatísticas.
  */
 
-import { supabase } from '../supabase';
+import { supabase } from '@/integrations/supabase/client';
 import type { NormalizedRow } from './shopee';
 import type { Marketplace } from './detect';
 
@@ -33,15 +33,13 @@ export async function upsertRows(
         errors: [],
     };
 
-    const db = supabase();
-
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         onProgress?.(i + 1, rows.length);
 
         try {
             // ── 1. UPSERT Order ──────────────────────────────────────
-            const { data: orderData, error: orderErr } = await db
+            const { data: orderData, error: orderErr } = await supabase
                 .from('orders')
                 .upsert(
                     {
@@ -63,15 +61,13 @@ export async function upsertRows(
             if (orderErr) throw new Error(`Order: ${orderErr.message}`);
             const orderId: string = orderData.id;
 
-            // Incrementar estatística: created ou updated
-            // (heurística: se created_at é recente, foi criado; senão, atualizado)
             const isNew =
                 new Date(orderData.created_at).getTime() > Date.now() - 5000;
             if (isNew) stats.ordersCreated++;
             else stats.ordersUpdated++;
 
             // ── 2. UPSERT Product ────────────────────────────────────
-            const { data: productData, error: productErr } = await db
+            const { data: productData, error: productErr } = await supabase
                 .from('products')
                 .upsert(
                     {
@@ -89,7 +85,7 @@ export async function upsertRows(
             stats.productsCreated++;
 
             // ── 3. UPSERT ProductVariant ─────────────────────────────
-            const { data: variantData, error: variantErr } = await db
+            const { data: variantData, error: variantErr } = await supabase
                 .from('product_variants')
                 .upsert(
                     {
@@ -109,7 +105,7 @@ export async function upsertRows(
             stats.variantsCreated++;
 
             // ── 4. UPSERT OrderItem ──────────────────────────────────
-            const { error: itemErr } = await db
+            const { error: itemErr } = await supabase
                 .from('order_items')
                 .upsert(
                     {
@@ -127,7 +123,7 @@ export async function upsertRows(
             // ── 5. UPSERT Package (se houver tracking) ───────────────
             if (row.scanCode || row.trackingCode) {
                 const scanCode = row.scanCode || row.trackingCode;
-                const { error: pkgErr } = await db
+                const { error: pkgErr } = await supabase
                     .from('packages')
                     .upsert(
                         {
@@ -144,15 +140,15 @@ export async function upsertRows(
                 if (pkgErr) throw new Error(`Package: ${pkgErr.message}`);
                 stats.packagesCreated++;
 
-                // ── 6. UPSERT package_items (cópia de order_items) ───────
-                const { data: pkgRow } = await db
+                // ── 6. UPSERT package_items ───────
+                const { data: pkgRow } = await supabase
                     .from('packages')
                     .select('id')
                     .eq('scan_code', scanCode)
                     .single();
 
                 if (pkgRow) {
-                    await db
+                    await supabase
                         .from('package_items')
                         .upsert(
                             {
