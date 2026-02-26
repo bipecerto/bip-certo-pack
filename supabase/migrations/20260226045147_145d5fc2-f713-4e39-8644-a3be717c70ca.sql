@@ -1,0 +1,1 @@
+ALTER TABLE public.orders ADD CONSTRAINT orders_marketplace_external_order_id_key UNIQUE (marketplace, external_order_id);

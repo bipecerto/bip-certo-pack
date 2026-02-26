@@ -46,11 +46,8 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-2xl font-bold">Configurações</h1>
-
       <Card>
-        <CardHeader>
-          <CardTitle>Perfil</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Perfil</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div>
             <Label>Email</Label>
@@ -69,11 +66,8 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
-
       <Card>
-        <CardHeader>
-          <CardTitle>Empresa</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Empresa</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div>
             <Label>Nome da Empresa</Label>

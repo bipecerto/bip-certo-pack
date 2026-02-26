@@ -71,10 +71,7 @@ export default function PackageDetailPage() {
       .eq("id", id)
       .single();
 
-    if (!pkgData) {
-      setLoading(false);
-      return;
-    }
+    if (!pkgData) { setLoading(false); return; }
     setPkg(pkgData);
 
     const { data: orderData } = await supabase
@@ -123,9 +120,7 @@ export default function PackageDetailPage() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
+  useEffect(() => { fetchData(); }, [id]);
 
   const handleAction = async (action: string, newStatus: string) => {
     if (!pkg || !companyId || !user) return;
@@ -201,9 +196,7 @@ export default function PackageDetailPage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Pedido</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Pedido</CardTitle></CardHeader>
           <CardContent className="space-y-1 text-sm">
             <p><strong>Cliente:</strong> {order?.customer_name || "—"}</p>
             <p><strong>Endereço:</strong> {order?.address_summary || "—"}</p>
@@ -211,9 +204,7 @@ export default function PackageDetailPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Etiqueta</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Etiqueta</CardTitle></CardHeader>
           <CardContent className="space-y-1 text-sm">
             <p><strong>Scan code:</strong> <span className="font-mono">{pkg.scan_code || "—"}</span></p>
             <p><strong>Tracking:</strong> <span className="font-mono">{pkg.tracking_code || "—"}</span></p>
@@ -222,7 +213,6 @@ export default function PackageDetailPage() {
         </Card>
       </div>
 
-      {/* Actions */}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={() => handleAction("checked", "checked")} className="gap-1">
           <CheckCircle className="h-4 w-4" /> Conferido
@@ -238,7 +228,6 @@ export default function PackageDetailPage() {
         </Button>
       </div>
 
-      {/* Items */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Conteúdo do Pacote</CardTitle>
@@ -249,14 +238,10 @@ export default function PackageDetailPage() {
               </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Adicionar item ao pacote</DialogTitle>
-              </DialogHeader>
+              <DialogHeader><DialogTitle>Adicionar item ao pacote</DialogTitle></DialogHeader>
               <div className="space-y-4">
                 <Select value={selectedVariant} onValueChange={setSelectedVariant}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um produto/variante" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione um produto/variante" /></SelectTrigger>
                   <SelectContent>
                     {variants.map((v) => (
                       <SelectItem key={v.id} value={v.id}>
@@ -265,13 +250,7 @@ export default function PackageDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  type="number"
-                  min={1}
-                  value={addQty}
-                  onChange={(e) => setAddQty(Number(e.target.value))}
-                  placeholder="Quantidade"
-                />
+                <Input type="number" min={1} value={addQty} onChange={(e) => setAddQty(Number(e.target.value))} placeholder="Quantidade" />
                 <Button onClick={handleAddItem} className="w-full">Adicionar</Button>
               </div>
             </DialogContent>
@@ -296,9 +275,7 @@ export default function PackageDetailPage() {
                     <TableCell className="font-medium">{item.product_name || "—"}</TableCell>
                     <TableCell>
                       {item.variant_name || "—"}
-                      {item.attributes?.size && (
-                        <Badge variant="outline" className="ml-2">{item.attributes.size}</Badge>
-                      )}
+                      {item.attributes?.size && <Badge variant="outline" className="ml-2">{item.attributes.size}</Badge>}
                     </TableCell>
                     <TableCell className="font-mono text-sm">{item.sku || "—"}</TableCell>
                     <TableCell className="text-right">{item.qty}</TableCell>
