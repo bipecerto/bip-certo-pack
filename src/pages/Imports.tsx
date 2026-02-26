@@ -1,57 +1,64 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, Loader2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { readFileWithEncoding, parseCsvText } from '@/lib/csv/parse';
-import { detectMarketplace } from '@/lib/csv/detect';
-import { mapShopeeRow } from '@/lib/csv/shopee';
-import { mapAliExpressRow } from '@/lib/csv/aliexpress';
-import { mapSheinRow } from '@/lib/csv/shein';
-import { upsertRows } from '@/lib/csv/upsert';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { v4 as uuidv4 } from 'uuid';
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-type Step = 'idle' | 'reading' | 'detecting' | 'parsing' | 'upserting' | 'done' | 'error';
+type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
 
-interface Stats {
-  ordersCreated: number;
-  ordersUpdated: number;
-  productsCreated: number;
-  variantsCreated: number;
-  packagesCreated: number;
-  itemsUpserted: number;
-  errors: { line: number; message: string }[];
+interface ImportJob {
+  id: string;
+  status: JobStatus;
+  file_path: string;
+  total_rows: number;
+  processed_rows: number;
+  error_message?: string;
+  created_at: string;
 }
 
-const MARKETPLACE_LABELS: Record<string, string> = {
-  shopee: 'Shopee',
-  aliexpress: 'AliExpress',
-  shein: 'SHEIN',
-  unknown: 'Desconhecido',
-};
-
-const MARKETPLACE_COLORS: Record<string, string> = {
-  shopee: 'text-orange-400 bg-orange-500/10 border-orange-500/20',
-  aliexpress: 'text-red-400 bg-red-500/10 border-red-500/20',
-  shein: 'text-pink-400 bg-pink-500/10 border-pink-500/20',
-  unknown: 'text-muted-foreground bg-muted border-border',
-};
+interface JobError {
+  line: number;
+  message: string;
+}
 
 export default function ImportsPage() {
   const { companyId, user } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>('idle');
-  const [marketplace, setMarketplace] = useState<string>('unknown');
-  const [progress, setProgress] = useState(0);
-  const [totalRows, setTotalRows] = useState(0);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [filename, setFilename] = useState('');
+  const [jobs, setJobs] = useState<ImportJob[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchJobs = useCallback(async () => {
+    if (!companyId) return;
+    const { data, error } = await supabase
+      .from('import_jobs')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching jobs:', error);
+      return;
+    }
+    setJobs(data || []);
+    setLoadingJobs(false);
+  }, [companyId]);
+
+  useEffect(() => {
+    fetchJobs();
+    const interval = setInterval(() => {
+      fetchJobs();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [fetchJobs]);
 
   const processFile = useCallback(async (file: File) => {
     if (!companyId || !user?.id) {
@@ -59,52 +66,57 @@ export default function ImportsPage() {
       return;
     }
 
-    setFilename(file.name);
-    setStep('reading');
-    setProgress(0);
-    setStats(null);
-
+    setUploading(true);
     try {
-      const text = await readFileWithEncoding(file);
+      const filePath = `${companyId}/${uuidv4()}.csv`;
 
-      setStep('detecting');
-      const { headers, rows } = parseCsvText(text);
-      const mkt = detectMarketplace(headers);
-      setMarketplace(mkt);
-      setTotalRows(rows.length);
+      const { error: uploadError } = await supabase.storage
+        .from('imports')
+        .upload(filePath, file, { contentType: 'text/csv' });
 
-      if (mkt === 'unknown') {
-        toast.error('Arquivo não reconhecido como exportação oficial de marketplace.');
-        setStep('error');
-        return;
+      if (uploadError) throw new Error('Falha no upload do arquivo');
+
+      const { data: job, error: jobError } = await supabase
+        .from('import_jobs')
+        .insert({
+          company_id: companyId,
+          file_path: filePath,
+          status: 'queued',
+        })
+        .select()
+        .single();
+
+      if (jobError || !job) throw new Error('Falha ao criar import job');
+
+      toast.success('Upload concluído. Iniciando processamento em lote...', { id: 'import-toast' });
+      fetchJobs();
+
+      // Trigger Edge Function directly
+      const { error: invokeError } = await supabase.functions.invoke('start_import', {
+        body: { job_id: job.id }
+      });
+
+      if (invokeError) {
+        console.error('start_import trigger error:', invokeError);
       }
-
-      setStep('parsing');
-      const mapper =
-        mkt === 'shopee' ? mapShopeeRow
-        : mkt === 'aliexpress' ? mapAliExpressRow
-        : mapSheinRow;
-
-      const normalizedRows = rows
-        .map((row) => mapper(row, headers))
-        .filter((r): r is NonNullable<typeof r> => r !== null);
-
-      setStep('upserting');
-      const result = await upsertRows(
-        normalizedRows,
-        mkt,
-        companyId,
-        (done, total) => setProgress(Math.round((done / total) * 100))
-      );
-
-      setStats(result);
-      setStep('done');
-      toast.success(`Importação concluída! ${result.ordersCreated + result.ordersUpdated} pedidos processados.`);
-    } catch (err) {
-      setStep('error');
-      toast.error('Erro na importação: ' + (err instanceof Error ? err.message : String(err)));
+    } catch (err: any) {
+      toast.error('Erro: ' + err.message, { id: 'import-toast' });
+    } finally {
+      setUploading(false);
     }
-  }, [companyId, user]);
+  }, [companyId, user, fetchJobs]);
+
+  const handleResumeJob = async (jobId: string) => {
+    try {
+      toast.success('Retomando job...');
+      await supabase.from('import_jobs').update({ status: 'running' }).eq('id', jobId);
+      fetchJobs();
+      await supabase.functions.invoke('resume_import', { body: { job_id: jobId } });
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao retomar job');
+    }
+  };
 
   const handleSelectFileClick = useCallback(async () => {
     if (isTauri) {
@@ -143,183 +155,132 @@ export default function ImportsPage() {
     [processFile]
   );
 
-  const steps = [
-    { id: 'reading', label: 'Lendo arquivo' },
-    { id: 'detecting', label: 'Detectando marketplace' },
-    { id: 'parsing', label: 'Processando linhas' },
-    { id: 'upserting', label: 'Salvando no banco' },
-    { id: 'done', label: 'Concluído' },
-  ];
-  const stepIdx = steps.findIndex((s) => s.id === step);
-
   return (
     <div className="p-6 max-w-3xl space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Importar CSV</h2>
+        <h2 className="text-xl font-semibold text-foreground">Importação Escalável</h2>
         <p className="text-muted-foreground text-sm mt-1">
-          Suporta exportações originais da Shopee, AliExpress e SHEIN.
+          Suporta 2.000+ pedidos utilizando banco de staging e upload assíncrono.
         </p>
       </div>
 
-      {step === 'idle' && (
-        <div
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-          onClick={handleSelectFileClick}
-          className={cn(
-            'border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-200',
-            isDragging
-              ? 'border-primary bg-primary/5'
-              : 'border-border hover:border-muted-foreground hover:bg-muted/30'
-          )}
-        >
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        onClick={handleSelectFileClick}
+        className={cn(
+          'border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-200',
+          uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+          isDragging
+            ? 'border-primary bg-primary/5'
+            : 'border-border hover:border-muted-foreground hover:bg-muted/30'
+        )}
+      >
+        {uploading ? (
+          <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+        ) : (
           <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-foreground font-medium text-lg">Arraste o CSV aqui</p>
-          <p className="text-muted-foreground text-sm mt-1">ou clique para selecionar</p>
-          <p className="text-muted-foreground/60 text-xs mt-3">Shopee · AliExpress · SHEIN — UTF-8 ou Latin1</p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) processFile(file);
-            }}
-          />
-        </div>
-      )}
+        )}
+        <p className="text-foreground font-medium text-lg">
+          {uploading ? 'Enviando arquivo...' : 'Arraste o CSV aqui'}
+        </p>
+        <p className="text-muted-foreground text-sm mt-1">ou clique para selecionar</p>
+        <p className="text-muted-foreground/60 text-xs mt-3">Qualquer marketplace com as colunas corretas</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          disabled={uploading}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) processFile(file);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }}
+        />
+      </div>
 
-      {step !== 'idle' && step !== 'done' && step !== 'error' && (
-        <div className="bg-card border border-border rounded-2xl p-6 space-y-5">
-          <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-primary" />
-            <span className="text-foreground font-medium truncate">{filename}</span>
-            {marketplace !== 'unknown' && (
-              <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', MARKETPLACE_COLORS[marketplace])}>
-                {MARKETPLACE_LABELS[marketplace]}
-              </span>
-            )}
-          </div>
+      <div>
+        <h3 className="text-lg font-semibold text-foreground mb-4">Minhas Importações</h3>
+        {loadingJobs ? (
+          <div className="text-sm text-muted-foreground">Carregando jobs...</div>
+        ) : jobs.length === 0 ? (
+          <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg">Nenhuma importação encontrada.</div>
+        ) : (
+          <div className="space-y-4">
+            {jobs.map((job) => {
+              const fileName = job.file_path.split('/').pop() || job.file_path;
+              const progress = job.total_rows > 0 ? Math.round((job.processed_rows / job.total_rows) * 100) : 0;
 
-          <div className="space-y-2">
-            {steps.slice(0, -1).map((s, idx) => (
-              <div key={s.id} className="flex items-center gap-3">
-                <div className={cn(
-                  'w-5 h-5 rounded-full flex items-center justify-center shrink-0',
-                  idx < stepIdx ? 'bg-green-500' :
-                    idx === stepIdx ? 'bg-primary animate-pulse' :
-                      'bg-muted'
-                )}>
-                  {idx < stepIdx && <CheckCircle className="w-3 h-3 text-white" />}
-                </div>
-                <span className={cn(
-                  'text-sm',
-                  idx < stepIdx ? 'text-green-400' :
-                    idx === stepIdx ? 'text-foreground font-medium' :
-                      'text-muted-foreground'
-                )}>
-                  {s.label}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {step === 'upserting' && (
-            <div>
-              <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>Processando linha {Math.round((progress / 100) * totalRows)} de {totalRows}</span>
-                <span>{progress}%</span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300 rounded-full"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === 'done' && stats && (
-        <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-6 h-6 text-green-400" />
-            <h3 className="text-lg font-semibold text-foreground">Importação Concluída</h3>
-            <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', MARKETPLACE_COLORS[marketplace])}>
-              {MARKETPLACE_LABELS[marketplace]}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {[
-              { label: 'Pedidos criados', value: stats.ordersCreated, color: 'text-green-400' },
-              { label: 'Pedidos atualizados', value: stats.ordersUpdated, color: 'text-blue-400' },
-              { label: 'Produtos', value: stats.productsCreated, color: 'text-violet-400' },
-              { label: 'Variantes', value: stats.variantsCreated, color: 'text-purple-400' },
-              { label: 'Pacotes', value: stats.packagesCreated, color: 'text-primary' },
-              { label: 'Erros', value: stats.errors.length, color: stats.errors.length > 0 ? 'text-destructive' : 'text-muted-foreground' },
-            ].map((item) => (
-              <div key={item.label} className="bg-muted rounded-xl p-3">
-                <div className={cn('text-2xl font-bold', item.color)}>{item.value}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{item.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {stats.errors.length > 0 && (
-            <div>
-              <button
-                onClick={() => setShowErrors(!showErrors)}
-                className="flex items-center gap-2 text-sm text-yellow-400 hover:text-yellow-300"
-              >
-                <AlertTriangle className="w-4 h-4" />
-                {stats.errors.length} erro(s) na importação
-                {showErrors ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-
-              {showErrors && (
-                <div className="mt-3 max-h-48 overflow-y-auto space-y-1.5 bg-muted rounded-lg p-3">
-                  {stats.errors.map((err, i) => (
-                    <div key={i} className="text-xs text-destructive font-mono">
-                      Linha {err.line}: {err.message}
+              return (
+                <div key={job.id} className="bg-card border border-border rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-5 h-5 text-primary" />
+                      <div>
+                        <div className="font-medium text-sm truncate max-w-[200px]">{fileName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(job.created_at).toLocaleString()}
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2">
+                      {job.status === 'completed' ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full border text-green-400 bg-green-500/10 border-green-500/20">
+                          Concluído
+                        </span>
+                      ) : job.status === 'failed' ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full border text-red-400 bg-red-500/10 border-red-500/20">
+                          Falhou
+                        </span>
+                      ) : job.status === 'queued' ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full border text-yellow-400 bg-yellow-500/10 border-yellow-500/20">
+                          Na Fila
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full border text-blue-400 bg-blue-500/10 border-blue-500/20 flex gap-1 items-center">
+                          <Loader2 className="w-3 h-3 animate-spin" /> {progress}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {(job.status === 'running' || job.status === 'queued') && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      <div className="flex justify-between mb-1">
+                        <span>{job.processed_rows} de {job.total_rows} linhas</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300 rounded-full"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {job.status === 'completed' && job.total_rows > 0 && job.processed_rows < job.total_rows && (
+                    <div className="mt-2 text-xs text-red-400">
+                      Algumas linhas falharam. Verifique os erros no banco.
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex gap-2">
+                    {(job.status === 'queued' || (job.status === 'running' && progress === 0)) && (
+                      <Button variant="secondary" size="sm" onClick={() => handleResumeJob(job.id)}>
+                        <Play className="w-3 h-3 mr-1" />
+                        Forçar Início
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              onClick={() => { setStep('idle'); setStats(null); }}
-              variant="outline"
-            >
-              Importar outro CSV
-            </Button>
-            <Button onClick={() => navigate('/packages')}>
-              Ver Pacotes
-            </Button>
+              );
+            })}
           </div>
-        </div>
-      )}
-
-      {step === 'error' && (
-        <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-6 text-center">
-          <XCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
-          <p className="text-destructive font-medium">Erro na importação</p>
-          <p className="text-muted-foreground text-sm mt-1">Verifique o arquivo e tente novamente.</p>
-          <Button
-            onClick={() => { setStep('idle'); setProgress(0); }}
-            variant="outline"
-            className="mt-4"
-          >
-            Tentar Novamente
-          </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
