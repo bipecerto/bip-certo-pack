@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Search, RefreshCw, ChevronRight } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { setCache, getCache, CACHE_KEYS } from '@/lib/cache';
 import { Input } from '@/components/ui/input';
@@ -31,7 +31,7 @@ interface PkgRow {
 }
 
 export default function PackagesPage() {
-  const { profile, packagesTick } = useApp();
+  const { profile } = useApp();
   const navigate = useNavigate();
   const [packages, setPackages] = useState<PkgRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +42,7 @@ export default function PackagesPage() {
     if (!profile?.company_id) return;
     setLoading(true);
     try {
-      const db = supabase();
+      const db = supabase;
       let q = db
         .from('packages')
         .select('id, scan_code, tracking_code, status, package_number, last_scanned_at, created_at, order:orders(external_order_id, customer_name, marketplace)')
@@ -67,7 +67,7 @@ export default function PackagesPage() {
     } finally {
       setLoading(false);
     }
-  }, [profile?.company_id, statusFilter, search, packagesTick]);
+  }, [profile?.company_id, statusFilter, search]);
 
   useEffect(() => { load(); }, [load]);
 

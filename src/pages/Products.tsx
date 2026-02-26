@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Box, Search, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ export default function ProductsPage() {
     if (!profile?.company_id) return;
     setLoading(true);
     try {
-      const db = supabase();
+      const db = supabase;
       let q = db
         .from('products')
         .select('id, name, base_sku, created_at, product_variants(id, variant_name, sku, attributes)')

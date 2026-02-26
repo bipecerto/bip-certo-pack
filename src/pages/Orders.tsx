@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Search, RefreshCw, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export default function OrdersPage() {
     if (!profile?.company_id) return;
     setLoading(true);
     try {
-      const db = supabase();
+      const db = supabase;
       let q = db
         .from('orders')
         .select(`
