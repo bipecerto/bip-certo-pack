@@ -1,1 +1,7 @@
 project_id = "opsgfflqzvoudrhjxnuo"
+
+[functions.start_import]
+verify_jwt = false
+
+[functions.resume_import]
+verify_jwt = false
