@@ -32,6 +32,104 @@ export type Database = {
         }
         Relationships: []
       }
+      import_job_errors: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          id: string
+          job_id: string
+          message: string | null
+          raw_row: Json | null
+          row_number: number | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          job_id: string
+          message?: string | null
+          raw_row?: Json | null
+          row_number?: number | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string
+          message?: string | null
+          raw_row?: Json | null
+          row_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_job_errors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_job_errors_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "import_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_jobs: {
+        Row: {
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          file_path: string
+          id: string
+          marketplace: string | null
+          processed_rows: number | null
+          started_at: string | null
+          stats: Json | null
+          status: string
+          total_rows: number | null
+        }
+        Insert: {
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_path: string
+          id?: string
+          marketplace?: string | null
+          processed_rows?: number | null
+          started_at?: string | null
+          stats?: Json | null
+          status?: string
+          total_rows?: number | null
+        }
+        Update: {
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_path?: string
+          id?: string
+          marketplace?: string | null
+          processed_rows?: number | null
+          started_at?: string | null
+          stats?: Json | null
+          status?: string
+          total_rows?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketplace_accounts: {
         Row: {
           access_token: string | null
@@ -66,6 +164,81 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_order_lines_staging: {
+        Row: {
+          address: string | null
+          buyer_name: string | null
+          company_id: string | null
+          created_at: string
+          external_order_id: string | null
+          id: string
+          item_name: string | null
+          job_id: string
+          line_hash: string
+          marketplace: string | null
+          processed: boolean | null
+          qty: number | null
+          raw_data: Json | null
+          recipient_name: string | null
+          sku: string | null
+          tracking_code: string | null
+          variation: string | null
+        }
+        Insert: {
+          address?: string | null
+          buyer_name?: string | null
+          company_id?: string | null
+          created_at?: string
+          external_order_id?: string | null
+          id?: string
+          item_name?: string | null
+          job_id: string
+          line_hash: string
+          marketplace?: string | null
+          processed?: boolean | null
+          qty?: number | null
+          raw_data?: Json | null
+          recipient_name?: string | null
+          sku?: string | null
+          tracking_code?: string | null
+          variation?: string | null
+        }
+        Update: {
+          address?: string | null
+          buyer_name?: string | null
+          company_id?: string | null
+          created_at?: string
+          external_order_id?: string | null
+          id?: string
+          item_name?: string | null
+          job_id?: string
+          line_hash?: string
+          marketplace?: string | null
+          processed?: boolean | null
+          qty?: number | null
+          raw_data?: Json | null
+          recipient_name?: string | null
+          sku?: string | null
+          tracking_code?: string | null
+          variation?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_order_lines_staging_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_order_lines_staging_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "import_jobs"
             referencedColumns: ["id"]
           },
         ]
@@ -414,6 +587,10 @@ export type Database = {
     }
     Functions: {
       get_user_company_id: { Args: never; Returns: string }
+      increment_processed_rows: {
+        Args: { count: number; inc_job_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
