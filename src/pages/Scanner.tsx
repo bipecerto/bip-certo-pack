@@ -63,6 +63,7 @@ export default function ScannerPage() {
   const [history, setHistory] = useState<ScanHistoryEntry[]>(loadHistory);
   const [cameraActive, setCameraActive] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const lockRef = useRef(false);
   const lastCodeRef = useRef<string>('');
   const lastScanTsRef = useRef<number>(0);
   const [notFoundOpen, setNotFoundOpen] = useState(false);
@@ -76,6 +77,10 @@ export default function ScannerPage() {
   }, [cameraActive]);
 
   useEffect(() => { refocus(); return () => clearTimeout(focusTimer.current); }, [refocus]);
+
+  useEffect(() => {
+    lockRef.current = isLocked;
+  }, [isLocked]);
 
   useEffect(() => {
     if (status === 'found') {
@@ -125,6 +130,7 @@ export default function ScannerPage() {
       if (pkg) {
         playBeep('success');
         if (navigator.vibrate) navigator.vibrate(100);
+        setCameraActive(false);
         setStatus('found');
         const newH = [{ value: term, found: true, packageId: pkg.id, timestamp: new Date() }, ...history.slice(0, 9)];
         setHistory(newH);
@@ -160,15 +166,18 @@ export default function ScannerPage() {
   }, [profile?.company_id, navigate, history]);
 
   const handleCameraScan = useCallback((code: string) => {
-    if (isLocked) return;
     const now = Date.now();
-    if (code === lastCodeRef.current && now - lastScanTsRef.current < 2000) return;
+    if (lockRef.current) return;
+    if (code === lastCodeRef.current && now - lastScanTsRef.current < 3000) return;
+
+    lockRef.current = true;
     lastCodeRef.current = code;
     lastScanTsRef.current = now;
     setIsLocked(true);
+    setCameraActive(false);
     setValue(code);
     lookup(code);
-  }, [isLocked, lookup]);
+  }, [lookup]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); lookup(value); }
@@ -176,20 +185,25 @@ export default function ScannerPage() {
 
   const unlockAndRescan = () => {
     setNotFoundOpen(false);
+    lockRef.current = false;
     setIsLocked(false);
+    setCameraActive(true);
     setStatus('idle');
     lastCodeRef.current = '';
+    lastScanTsRef.current = 0;
     setValue('');
     refocus();
   };
 
   const handleNotFoundOk = () => {
     setNotFoundOpen(false);
+    setCameraActive(false);
     setStatus('idle');
   };
 
   const handleGoToImports = () => {
     setNotFoundOpen(false);
+    setCameraActive(false);
     navigate('/imports');
   };
 
@@ -310,7 +324,7 @@ export default function ScannerPage() {
           <DialogHeader>
             <DialogTitle>Código não encontrado</DialogTitle>
             <DialogDescription>
-              O código <span className="font-mono font-semibold">{notFoundCode}</span> não foi encontrado no sistema. Verifique se os pedidos já foram importados.
+              Não encontramos esse código no sistema. Verifique se os pedidos já foram importados.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
