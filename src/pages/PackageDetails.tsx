@@ -39,6 +39,7 @@ interface PackageDetail {
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
     packed: { label: 'Embalado', color: 'bg-info/10 text-info border-info/20', icon: <Package className="w-3.5 h-3.5" /> },
     checking: { label: 'Em Conferência', color: 'bg-warning/10 text-warning border-warning/20', icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+    verified: { label: 'Verificado', color: 'bg-green-100 text-green-800 border-green-200', icon: <CheckCircle className="w-3.5 h-3.5" /> },
     shipped: { label: 'Enviado', color: 'bg-success/10 text-success border-success/20', icon: <Truck className="w-3.5 h-3.5" /> },
     cancelled: { label: 'Cancelado', color: 'bg-destructive/10 text-destructive border-destructive/20', icon: <XCircle className="w-3.5 h-3.5" /> },
 };
@@ -85,7 +86,13 @@ export default function PackageDetails() {
         if (!pkg || !profile?.company_id) return;
         setActionLoading(action);
         try {
-            await supabase.from('packages').update({ status: newStatus, last_scanned_at: new Date().toISOString() }).eq('id', pkg.id);
+            const updatePayload: Record<string, any> = { status: newStatus, last_scanned_at: new Date().toISOString() };
+            if (newStatus === 'verified') {
+                const { data: authData } = await supabase.auth.getUser();
+                updatePayload.verified_at = new Date().toISOString();
+                updatePayload.verified_by = authData.user?.id || null;
+            }
+            await supabase.from('packages').update(updatePayload).eq('id', pkg.id);
             const { data: authData } = await supabase.auth.getUser();
             await supabase.from('scans').insert({
                 company_id: profile.company_id, package_id: pkg.id, user_id: authData.user?.id, action, meta: { previous_status: pkg.status },
@@ -206,9 +213,10 @@ export default function PackageDetails() {
 
             <div className="bg-card border border-border rounded-2xl p-5">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Ações</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                     {[
-                        { action: 'checking', status: 'checking', label: 'Conferido', icon: <ClipboardCheck className="w-4 h-4" />, variant: 'secondary' as const },
+                        { action: 'checking', status: 'checking', label: 'Em Conferência', icon: <ClipboardCheck className="w-4 h-4" />, variant: 'secondary' as const },
+                        { action: 'verified', status: 'verified', label: 'Verificado', icon: <CheckCircle className="w-4 h-4" />, variant: 'secondary' as const },
                         { action: 'packed', status: 'packed', label: 'Embalado', icon: <Package className="w-4 h-4" />, variant: 'secondary' as const },
                         { action: 'shipped', status: 'shipped', label: 'Enviado', icon: <Truck className="w-4 h-4" />, variant: 'default' as const },
                         { action: 'cancelled', status: 'cancelled', label: 'Cancelado', icon: <XCircle className="w-4 h-4" />, variant: 'destructive' as const },

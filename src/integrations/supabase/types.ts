@@ -387,6 +387,8 @@ export type Database = {
           scan_code: string | null
           status: string
           tracking_code: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           company_id: string
@@ -398,6 +400,8 @@ export type Database = {
           scan_code?: string | null
           status?: string
           tracking_code?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           company_id?: string
@@ -409,6 +413,8 @@ export type Database = {
           scan_code?: string | null
           status?: string
           tracking_code?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {

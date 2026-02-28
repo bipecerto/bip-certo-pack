@@ -161,7 +161,7 @@ export default function ScannerPage() {
         setNotFoundOpen(true);
       }
     } finally {
-      setValue('');
+      // Keep value in input when not found so user can see what was searched
     }
   }, [profile?.company_id, navigate, history]);
 

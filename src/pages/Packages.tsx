@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-type StatusFilter = 'all' | 'packed' | 'checking' | 'shipped' | 'cancelled';
+type StatusFilter = 'all' | 'packed' | 'checking' | 'verified' | 'shipped' | 'cancelled';
 
 const STATUS_CONFIG = {
   all: { label: 'Todos', color: 'bg-muted text-muted-foreground border-border' },
   packed: { label: 'Embalado', color: 'bg-info/10 text-info border-info/20' },
   checking: { label: 'Em Conferência', color: 'bg-warning/10 text-warning border-warning/20' },
+  verified: { label: 'Verificado', color: 'bg-green-100 text-green-800 border-green-200' },
   shipped: { label: 'Enviado', color: 'bg-success/10 text-success border-success/20' },
   cancelled: { label: 'Cancelado', color: 'bg-destructive/10 text-destructive border-destructive/20' },
 };
