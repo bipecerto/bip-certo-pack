@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Package, Tag, Filter } from 'lucide-react';
+import { Search, Package, Tag, Filter, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { Input } from '@/components/ui/input';
@@ -31,8 +31,17 @@ interface ResultRow {
 const STATUS_COLOR: Record<string, string> = {
   packed: 'bg-info/10 text-info border-info/20',
   checking: 'bg-warning/10 text-warning border-warning/20',
+  verified: 'bg-green-100 text-green-800 border-green-200',
   shipped: 'bg-success/10 text-success border-success/20',
   cancelled: 'bg-destructive/10 text-destructive border-destructive/20',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  packed: 'Embalado',
+  checking: 'Em Conferência',
+  verified: 'Verificado',
+  shipped: 'Enviado',
+  cancelled: 'Cancelado',
 };
 
 export default function FindPage() {
@@ -53,55 +62,136 @@ export default function FindPage() {
     setLoading(true);
     setSearched(true);
     try {
+      const companyId = profile.company_id;
+      const query = term.trim();
+      const rows: ResultRow[] = [];
+
+      // Strategy: query order_items as base, join variants+products, then for each match get packages
+      // Step 1: Find matching variant IDs
       let variantQuery = supabase
         .from('product_variants')
-        .select('id, variant_name, sku, attributes, product:products(name)')
-        .eq('company_id', profile.company_id);
+        .select('id, variant_name, sku, attributes, product:products!inner(name)')
+        .eq('company_id', companyId);
 
-      if (term.trim()) {
-        variantQuery = variantQuery.or(`variant_name.ilike.%${term.trim()}%,sku.ilike.%${term.trim()}%`);
+      if (query) {
+        // Search product name via inner join, or variant_name/sku
+        variantQuery = variantQuery.or(`variant_name.ilike.%${query}%,sku.ilike.%${query}%,product.name.ilike.%${query}%`);
       }
       if (selectedSize) {
-        variantQuery = variantQuery.contains('attributes', { size: selectedSize });
+        variantQuery = variantQuery.filter('attributes->>size', 'eq', selectedSize);
       }
 
-      const { data: variants, error: vErr } = await variantQuery.limit(100);
+      const { data: variants, error: vErr } = await variantQuery.limit(200);
       if (vErr) throw vErr;
-      if (!variants || variants.length === 0) { setResults([]); return; }
 
-      const variantIds = variants.map((v) => v.id);
-      const { data: pkgItems, error: piErr } = await supabase
-        .from('package_items')
-        .select(`qty, variant_id, package:packages(id, scan_code, tracking_code, status, order:orders(id, external_order_id, customer_name, marketplace))`)
-        .eq('company_id', profile.company_id)
-        .in('variant_id', variantIds);
+      // Step 2: Also search by tracking/scan_code/external_order_id directly
+      let directPackages: any[] = [];
+      if (query) {
+        const { data: pkgDirect } = await supabase
+          .from('packages')
+          .select('id, scan_code, tracking_code, status, order:orders!inner(id, external_order_id, customer_name, marketplace)')
+          .eq('company_id', companyId)
+          .or(`scan_code.eq.${query},tracking_code.eq.${query},order.external_order_id.eq.${query}`)
+          .limit(50);
+        directPackages = pkgDirect || [];
+      }
 
-      if (piErr) throw piErr;
-      const variantMap = new Map(variants.map((v) => [v.id, v]));
+      // Step 3: For variant matches, get order_items -> packages
+      if (variants && variants.length > 0) {
+        const variantIds = variants.map((v) => v.id);
+        // Get order_items for these variants
+        const { data: orderItems } = await supabase
+          .from('order_items')
+          .select('qty, variant_id, order:orders!inner(id, external_order_id, customer_name, marketplace)')
+          .eq('company_id', companyId)
+          .in('variant_id', variantIds);
 
-      const rows: ResultRow[] = (pkgItems || [])
-        .filter((pi: any) => pi.package)
-        .map((pi: any) => {
-          const v = variantMap.get(pi.variant_id);
-          const pkg = pi.package;
-          const order = pkg.order;
-          return {
-            variantId: pi.variant_id,
-            productName: (v?.product as any)?.name || 'Produto desconhecido',
-            variantName: v?.variant_name || null,
-            sku: v?.sku || null,
-            size: (v?.attributes as any)?.size || null,
-            qty: pi.qty,
-            packageId: pkg.id,
-            scanCode: pkg.scan_code,
-            trackingCode: pkg.tracking_code,
-            packageStatus: pkg.status,
-            orderId: order?.id || '',
-            externalOrderId: order?.external_order_id || '',
-            customerName: order?.customer_name || null,
-            marketplace: order?.marketplace || '',
-          };
+        if (orderItems && orderItems.length > 0) {
+          const orderIds = [...new Set(orderItems.map((oi: any) => oi.order.id))];
+          // Get packages for these orders
+          const { data: pkgs } = await supabase
+            .from('packages')
+            .select('id, scan_code, tracking_code, status, order_id')
+            .eq('company_id', companyId)
+            .in('order_id', orderIds);
+
+          const pkgMap = new Map<string, any[]>();
+          (pkgs || []).forEach((p: any) => {
+            if (!pkgMap.has(p.order_id)) pkgMap.set(p.order_id, []);
+            pkgMap.get(p.order_id)!.push(p);
+          });
+
+          const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+          for (const oi of orderItems as any[]) {
+            const v = variantMap.get(oi.variant_id);
+            const order = oi.order;
+            const packages = pkgMap.get(order.id) || [];
+            
+            if (packages.length === 0) {
+              // Show even without package
+              rows.push({
+                variantId: oi.variant_id,
+                productName: (v?.product as any)?.name || 'Produto desconhecido',
+                variantName: v?.variant_name || null,
+                sku: v?.sku || null,
+                size: (v?.attributes as any)?.size || null,
+                qty: oi.qty,
+                packageId: '',
+                scanCode: null,
+                trackingCode: null,
+                packageStatus: 'packed',
+                orderId: order.id,
+                externalOrderId: order.external_order_id || '',
+                customerName: order.customer_name || null,
+                marketplace: order.marketplace || '',
+              });
+            } else {
+              for (const pkg of packages) {
+                rows.push({
+                  variantId: oi.variant_id,
+                  productName: (v?.product as any)?.name || 'Produto desconhecido',
+                  variantName: v?.variant_name || null,
+                  sku: v?.sku || null,
+                  size: (v?.attributes as any)?.size || null,
+                  qty: oi.qty,
+                  packageId: pkg.id,
+                  scanCode: pkg.scan_code,
+                  trackingCode: pkg.tracking_code,
+                  packageStatus: pkg.status,
+                  orderId: order.id,
+                  externalOrderId: order.external_order_id || '',
+                  customerName: order.customer_name || null,
+                  marketplace: order.marketplace || '',
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Step 4: Add direct package matches (not already included)
+      const existingPkgIds = new Set(rows.map((r) => r.packageId));
+      for (const pkg of directPackages) {
+        if (existingPkgIds.has(pkg.id)) continue;
+        const order = pkg.order;
+        rows.push({
+          variantId: '',
+          productName: '—',
+          variantName: null,
+          sku: null,
+          size: null,
+          qty: 0,
+          packageId: pkg.id,
+          scanCode: pkg.scan_code,
+          trackingCode: pkg.tracking_code,
+          packageStatus: pkg.status,
+          orderId: order?.id || '',
+          externalOrderId: order?.external_order_id || '',
+          customerName: order?.customer_name || null,
+          marketplace: order?.marketplace || '',
         });
+      }
 
       setResults(rows);
     } catch (err) {
@@ -115,7 +205,7 @@ export default function FindPage() {
     <div className="p-6 space-y-5">
       <div>
         <h2 className="text-xl font-semibold text-foreground">Pesquisar Item</h2>
-        <p className="text-muted-foreground text-sm mt-1">Encontre em qual pacote está um produto.</p>
+        <p className="text-muted-foreground text-sm mt-1">Encontre em qual pacote está um produto, ou busque por código de rastreio.</p>
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
@@ -126,12 +216,12 @@ export default function FindPage() {
               value={term}
               onChange={(e) => setTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Nome do produto, variante ou SKU..."
+              placeholder="Produto, SKU, tracking, scan code ou ID do pedido..."
               className="pl-9"
             />
           </div>
           <Button onClick={handleSearch} disabled={loading} className="px-6">
-            {loading ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
           </Button>
         </div>
 
@@ -161,14 +251,18 @@ export default function FindPage() {
       {searched && !loading && (
         <div>
           <p className="text-sm text-muted-foreground mb-3">
-            {results.length === 0 ? 'Nenhum resultado encontrado.' : `${results.length} resultado(s)`}
+            {results.length === 0 ? 'Nenhum item encontrado. Verifique se os pedidos já foram importados.' : `${results.length} resultado(s)`}
           </p>
           <div className="space-y-2">
             {results.map((row, i) => (
               <button
-                key={i}
-                onClick={() => navigate(`/package/${row.packageId}`)}
-                className="w-full bg-card border border-border rounded-2xl p-4 text-left hover:border-primary/40 hover:shadow-sm transition-all group"
+                key={`${row.packageId || row.orderId}-${row.variantId}-${i}`}
+                onClick={() => row.packageId ? navigate(`/package/${row.packageId}`) : null}
+                disabled={!row.packageId}
+                className={cn(
+                  'w-full bg-card border border-border rounded-2xl p-4 text-left transition-all',
+                  row.packageId ? 'hover:border-primary/40 hover:shadow-sm cursor-pointer' : 'opacity-70 cursor-default'
+                )}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
@@ -180,23 +274,25 @@ export default function FindPage() {
                           TAM {row.size}
                         </span>
                       )}
-                      <span className="text-xs text-muted-foreground">×{row.qty}</span>
+                      {row.qty > 0 && <span className="text-xs text-muted-foreground">×{row.qty}</span>}
                     </div>
                     <div className="flex items-center gap-3 mt-2 flex-wrap">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Package className="w-3.5 h-3.5" />
-                        <span className="font-mono">{row.scanCode || row.trackingCode || 'Sem código'}</span>
+                        <span className="font-mono">{row.scanCode || row.trackingCode || 'Sem pacote'}</span>
                       </div>
                       {row.customerName && <span className="text-xs text-muted-foreground">• {row.customerName}</span>}
-                      <span className="text-xs font-medium text-muted-foreground uppercase">{row.marketplace}</span>
-                      <div className="flex items-center gap-1.5">
-                        <Tag className="w-3 h-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground font-mono">{row.externalOrderId}</span>
-                      </div>
+                      {row.marketplace && <span className="text-xs font-medium text-muted-foreground uppercase">{row.marketplace}</span>}
+                      {row.externalOrderId && (
+                        <div className="flex items-center gap-1.5">
+                          <Tag className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground font-mono">{row.externalOrderId}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <span className={cn('shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border', STATUS_COLOR[row.packageStatus] || STATUS_COLOR['packed'])}>
-                    {row.packageStatus}
+                    {STATUS_LABEL[row.packageStatus] || row.packageStatus}
                   </span>
                 </div>
               </button>
