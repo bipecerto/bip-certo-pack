@@ -8,6 +8,14 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MobileScanner } from '@/components/scanner/MobileScanner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface ScanHistoryEntry {
   value: string;
@@ -54,6 +62,11 @@ export default function ScannerPage() {
   const [status, setStatus] = useState<'idle' | 'searching' | 'found' | 'notfound'>('idle');
   const [history, setHistory] = useState<ScanHistoryEntry[]>(loadHistory);
   const [cameraActive, setCameraActive] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const lastCodeRef = useRef<string>('');
+  const lastScanTsRef = useRef<number>(0);
+  const [notFoundOpen, setNotFoundOpen] = useState(false);
+  const [notFoundCode, setNotFoundCode] = useState('');
   const focusTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const refocus = useCallback(() => {
@@ -65,21 +78,23 @@ export default function ScannerPage() {
   useEffect(() => { refocus(); return () => clearTimeout(focusTimer.current); }, [refocus]);
 
   useEffect(() => {
-    if (status === 'found' || status === 'notfound') {
-      const t = setTimeout(() => { setStatus('idle'); refocus(); }, 1800);
+    if (status === 'found') {
+      const t = setTimeout(() => { setStatus('idle'); }, 1800);
       return () => clearTimeout(t);
     }
-  }, [status, refocus]);
+  }, [status]);
 
-  const search = useCallback(async (raw: string) => {
-    if (!raw.trim() || !profile?.company_id) return;
-    const term = raw.trim();
+  const lookup = useCallback(async (term: string) => {
+    if (!term.trim() || !profile?.company_id) return;
     setStatus('searching');
 
     try {
-      let { data: pkg } = await supabase
+      let pkg: { id: string; scan_code: string | null } | null = null;
+
+      const { data: byScan } = await supabase
         .from('packages').select('id,scan_code')
         .eq('company_id', profile.company_id).eq('scan_code', term).maybeSingle();
+      pkg = byScan;
 
       if (!pkg) {
         const { data } = await supabase
@@ -100,8 +115,16 @@ export default function ScannerPage() {
         }
       }
 
+      if (!pkg) {
+        // Try cache
+        const cached = getCache<{ id: string; scan_code: string; tracking_code?: string }[]>(CACHE_KEYS.PACKAGES);
+        const fromCache = cached?.find((p) => p.scan_code === term || p.tracking_code === term);
+        if (fromCache) pkg = { id: fromCache.id, scan_code: fromCache.scan_code };
+      }
+
       if (pkg) {
         playBeep('success');
+        if (navigator.vibrate) navigator.vibrate(100);
         setStatus('found');
         const newH = [{ value: term, found: true, packageId: pkg.id, timestamp: new Date() }, ...history.slice(0, 9)];
         setHistory(newH);
@@ -109,23 +132,14 @@ export default function ScannerPage() {
         await new Promise((r) => setTimeout(r, 400));
         navigate(`/package/${pkg.id}`);
       } else {
-        const cached = getCache<{ id: string; scan_code: string; tracking_code?: string }[]>(CACHE_KEYS.PACKAGES);
-        const fromCache = cached?.find((p) => p.scan_code === term || p.tracking_code === term);
-        if (fromCache) {
-          playBeep('success');
-          setStatus('found');
-          const newH = [{ value: term, found: true, packageId: fromCache.id, timestamp: new Date() }, ...history.slice(0, 9)];
-          setHistory(newH);
-          saveHistory(newH);
-          await new Promise((r) => setTimeout(r, 400));
-          navigate(`/package/${fromCache.id}`);
-        } else {
-          playBeep('error');
-          setStatus('notfound');
-          const newH = [{ value: term, found: false, timestamp: new Date() }, ...history.slice(0, 9)];
-          setHistory(newH);
-          saveHistory(newH);
-        }
+        playBeep('error');
+        if (navigator.vibrate) navigator.vibrate(200);
+        setStatus('notfound');
+        const newH = [{ value: term, found: false, timestamp: new Date() }, ...history.slice(0, 9)];
+        setHistory(newH);
+        saveHistory(newH);
+        setNotFoundCode(term);
+        setNotFoundOpen(true);
       }
     } catch {
       const cached = getCache<{ id: string; scan_code: string; tracking_code?: string }[]>(CACHE_KEYS.PACKAGES);
@@ -137,20 +151,47 @@ export default function ScannerPage() {
       } else {
         playBeep('error');
         setStatus('notfound');
+        setNotFoundCode(term);
+        setNotFoundOpen(true);
       }
     } finally {
       setValue('');
     }
   }, [profile?.company_id, navigate, history]);
 
+  const handleCameraScan = useCallback((code: string) => {
+    if (isLocked) return;
+    const now = Date.now();
+    if (code === lastCodeRef.current && now - lastScanTsRef.current < 2000) return;
+    lastCodeRef.current = code;
+    lastScanTsRef.current = now;
+    setIsLocked(true);
+    setValue(code);
+    lookup(code);
+  }, [isLocked, lookup]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') { e.preventDefault(); search(value); }
+    if (e.key === 'Enter') { e.preventDefault(); lookup(value); }
   };
 
-  const handleCameraScan = useCallback((code: string) => {
-    setValue(code);
-    search(code);
-  }, [search]);
+  const unlockAndRescan = () => {
+    setNotFoundOpen(false);
+    setIsLocked(false);
+    setStatus('idle');
+    lastCodeRef.current = '';
+    setValue('');
+    refocus();
+  };
+
+  const handleNotFoundOk = () => {
+    setNotFoundOpen(false);
+    setStatus('idle');
+  };
+
+  const handleGoToImports = () => {
+    setNotFoundOpen(false);
+    navigate('/imports');
+  };
 
   const statusIcon = {
     idle: <Scan className="w-10 h-10 text-primary" />,
@@ -203,6 +244,7 @@ export default function ScannerPage() {
             onScan={handleCameraScan}
             active={cameraActive}
             onToggle={setCameraActive}
+            locked={isLocked}
           />
         </div>
 
@@ -222,7 +264,7 @@ export default function ScannerPage() {
               className="font-mono text-lg text-center h-14"
             />
             <Button
-              onClick={() => search(value)}
+              onClick={() => lookup(value)}
               disabled={!value.trim() || status === 'searching'}
               className="h-14 px-5"
             >
@@ -261,6 +303,23 @@ export default function ScannerPage() {
           </div>
         </div>
       )}
+
+      {/* Not Found Dialog */}
+      <Dialog open={notFoundOpen} onOpenChange={setNotFoundOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Código não encontrado</DialogTitle>
+            <DialogDescription>
+              O código <span className="font-mono font-semibold">{notFoundCode}</span> não foi encontrado no sistema. Verifique se os pedidos já foram importados.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={handleNotFoundOk}>OK</Button>
+            <Button variant="secondary" onClick={unlockAndRescan}>Escanear novamente</Button>
+            <Button onClick={handleGoToImports}>Ir para Imports</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

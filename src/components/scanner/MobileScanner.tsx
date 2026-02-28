@@ -7,12 +7,12 @@ interface MobileScannerProps {
   onScan: (code: string) => void;
   active: boolean;
   onToggle: (active: boolean) => void;
+  locked?: boolean;
 }
 
-export function MobileScanner({ onScan, active, onToggle }: MobileScannerProps) {
+export function MobileScanner({ onScan, active, onToggle, locked }: MobileScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastScanRef = useRef<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
@@ -33,7 +33,6 @@ export function MobileScanner({ onScan, active, onToggle }: MobileScannerProps) 
     setStarting(true);
 
     try {
-      // Check HTTPS
       if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
         setError('A câmera requer HTTPS. Acesse o app via HTTPS.');
         setStarting(false);
@@ -53,15 +52,9 @@ export function MobileScanner({ onScan, active, onToggle }: MobileScannerProps) 
           aspectRatio: 16 / 9,
         },
         (decodedText) => {
-          const now = Date.now();
-          if (now - lastScanRef.current < 1500) return; // debounce
-          lastScanRef.current = now;
-
-          // Vibrate if available
-          if (navigator.vibrate) navigator.vibrate(100);
           onScan(decodedText);
         },
-        () => {} // ignore errors during scanning
+        () => {}
       );
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -111,13 +104,18 @@ export function MobileScanner({ onScan, active, onToggle }: MobileScannerProps) 
 
       <div
         ref={containerRef}
-        className={active ? 'block' : 'hidden'}
+        className={active ? 'block relative' : 'hidden'}
       >
         <div
           id="mobile-scanner-region"
           className="rounded-xl overflow-hidden border border-border bg-muted"
           style={{ width: '100%', minHeight: active ? 280 : 0 }}
         />
+        {locked && (
+          <div className="absolute inset-0 bg-black/60 rounded-xl flex items-center justify-center z-10">
+            <span className="text-white font-semibold text-lg">Leitura capturada</span>
+          </div>
+        )}
       </div>
     </div>
   );
