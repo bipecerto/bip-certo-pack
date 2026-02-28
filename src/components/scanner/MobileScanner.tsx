@@ -13,8 +13,18 @@ interface MobileScannerProps {
 export function MobileScanner({ onScan, active, onToggle, locked }: MobileScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const callbackLockedRef = useRef(false);
+  const lastDecodedRef = useRef('');
+  const lastDecodedTsRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+
+  const stopNativeTracks = useCallback(() => {
+    const video = containerRef.current?.querySelector('video') as HTMLVideoElement | null;
+    const stream = video?.srcObject as MediaStream | null;
+    stream?.getTracks().forEach((track) => track.stop());
+    if (video) video.srcObject = null;
+  }, []);
 
   const stopScanner = useCallback(async () => {
     try {
@@ -23,9 +33,26 @@ export function MobileScanner({ onScan, active, onToggle, locked }: MobileScanne
       }
     } catch {
       // ignore
+    } finally {
+      stopNativeTracks();
+      scannerRef.current = null;
     }
-    scannerRef.current = null;
-  }, []);
+  }, [stopNativeTracks]);
+
+  const handleDecoded = useCallback(async (decodedText: string) => {
+    const now = Date.now();
+
+    if (callbackLockedRef.current) return;
+    if (decodedText === lastDecodedRef.current && now - lastDecodedTsRef.current < 3000) return;
+
+    callbackLockedRef.current = true;
+    lastDecodedRef.current = decodedText;
+    lastDecodedTsRef.current = now;
+
+    await stopScanner();
+    onToggle(false);
+    onScan(decodedText);
+  }, [onScan, onToggle, stopScanner]);
 
   const startScanner = useCallback(async () => {
     if (!containerRef.current) return;
@@ -45,14 +72,19 @@ export function MobileScanner({ onScan, active, onToggle, locked }: MobileScanne
       scannerRef.current = scanner;
 
       await scanner.start(
-        { facingMode: 'environment' },
+        { facingMode: { ideal: 'environment' } },
         {
           fps: 10,
           qrbox: { width: 280, height: 180 },
           aspectRatio: 16 / 9,
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
         },
         (decodedText) => {
-          onScan(decodedText);
+          void handleDecoded(decodedText);
         },
         () => {}
       );
@@ -69,7 +101,20 @@ export function MobileScanner({ onScan, active, onToggle, locked }: MobileScanne
     } finally {
       setStarting(false);
     }
-  }, [onScan, onToggle, stopScanner]);
+  }, [handleDecoded, onToggle, stopScanner]);
+
+  useEffect(() => {
+    callbackLockedRef.current = !!locked;
+  }, [locked]);
+
+  useEffect(() => {
+    if (locked && active) {
+      void (async () => {
+        await stopScanner();
+        onToggle(false);
+      })();
+    }
+  }, [locked, active, onToggle, stopScanner]);
 
   useEffect(() => {
     if (active) {
@@ -120,3 +165,4 @@ export function MobileScanner({ onScan, active, onToggle, locked }: MobileScanne
     </div>
   );
 }
+
