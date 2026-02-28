@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, MapPin, Tag, CheckCircle, Truck, XCircle, ClipboardCheck } from 'lucide-react';
+import { ArrowLeft, Package, MapPin, Tag, CheckCircle, Truck, XCircle, ClipboardCheck, Trash2, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface PackageDetail {
     id: string;
@@ -233,7 +237,50 @@ export default function PackageDetails() {
                         </Button>
                     ))}
                 </div>
+                <div className="mt-4 pt-3 border-t border-border">
+                    <DeletePackageButton packageId={pkg.id} onDeleted={() => navigate(-1)} />
+                </div>
             </div>
         </div>
+    );
+}
+
+function DeletePackageButton({ packageId, onDeleted }: { packageId: string; onDeleted: () => void }) {
+    const [deleting, setDeleting] = useState(false);
+    const handleDelete = async () => {
+        setDeleting(true);
+        try {
+            await supabase.from('package_items').delete().eq('package_id', packageId);
+            await supabase.from('scans').delete().eq('package_id', packageId);
+            const { error } = await supabase.from('packages').delete().eq('id', packageId);
+            if (error) throw error;
+            toast.success('Pacote excluído.');
+            onDeleted();
+        } catch (err: any) {
+            toast.error('Erro: ' + err.message);
+        } finally {
+            setDeleting(false);
+        }
+    };
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                    <Trash2 className="w-3 h-3 mr-1" /> Excluir pacote
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir pacote?</AlertDialogTitle>
+                    <AlertDialogDescription>Isso excluirá o pacote e seus itens permanentemente.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar exclusão'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }

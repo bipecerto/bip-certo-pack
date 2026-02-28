@@ -480,24 +480,30 @@ export type Database = {
       }
       products: {
         Row: {
+          archived_at: string | null
           base_sku: string | null
           company_id: string
           created_at: string
           id: string
+          is_archived: boolean
           name: string
         }
         Insert: {
+          archived_at?: string | null
           base_sku?: string | null
           company_id: string
           created_at?: string
           id?: string
+          is_archived?: boolean
           name: string
         }
         Update: {
+          archived_at?: string | null
           base_sku?: string | null
           company_id?: string
           created_at?: string
           id?: string
+          is_archived?: boolean
           name?: string
         }
         Relationships: [
