@@ -18,10 +18,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-950">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-500 text-sm">Carregando...</p>
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-muted-foreground text-sm">Carregando...</p>
         </div>
       </div>
     );
@@ -35,8 +35,6 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-
-      {/* Settings é acessível sem login para configurar Supabase */}
       <Route
         path="/settings"
         element={
@@ -47,8 +45,6 @@ function AppRoutes() {
       >
         <Route index element={<SettingsPage />} />
       </Route>
-
-      {/* Rotas protegidas */}
       <Route
         element={
           <ProtectedRoute>
@@ -66,8 +62,6 @@ function AppRoutes() {
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/products" element={<ProductsPage />} />
       </Route>
-
-      {/* Redirect root */}
       <Route path="/" element={<Navigate to="/scanner" replace />} />
       <Route path="*" element={<Navigate to="/scanner" replace />} />
     </Routes>
@@ -79,17 +73,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
-        <Toaster
-          position="top-right"
-          richColors
-          toastOptions={{
-            style: {
-              background: '#1e293b',
-              border: '1px solid #334155',
-              color: '#f1f5f9',
-            },
-          }}
-        />
+        <Toaster position="top-right" richColors />
       </AuthProvider>
     </BrowserRouter>
   );
