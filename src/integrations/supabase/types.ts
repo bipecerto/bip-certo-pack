@@ -518,6 +518,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          access_override: boolean
           company_id: string | null
           created_at: string
           id: string
@@ -525,6 +526,7 @@ export type Database = {
           role: string
         }
         Insert: {
+          access_override?: boolean
           company_id?: string | null
           created_at?: string
           id: string
@@ -532,6 +534,7 @@ export type Database = {
           role?: string
         }
         Update: {
+          access_override?: boolean
           company_id?: string | null
           created_at?: string
           id?: string
@@ -589,6 +592,47 @@ export type Database = {
             columns: ["package_id"]
             isOneToOne: false
             referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          company_id: string
+          created_at: string
+          ends_at: string | null
+          id: string
+          plan: string
+          started_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          plan?: string
+          started_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          plan?: string
+          started_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

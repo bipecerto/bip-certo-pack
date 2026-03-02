@@ -3,7 +3,9 @@ import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AppProvider } from '@/contexts/AppContext';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { RequireAccess } from '@/components/RequireAccess';
 import LoginPage from '@/pages/Login';
+import LandingPage from '@/pages/Landing';
 import SettingsPage from '@/pages/Settings';
 import ScannerPage from '@/pages/Scanner';
 import FindPage from '@/pages/Find';
@@ -27,20 +29,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/settings"
         element={
-          <AppProvider>
-            <AppLayout />
-          </AppProvider>
+          <ProtectedRoute>
+            <RequireAccess>
+              <AppProvider>
+                <AppLayout />
+              </AppProvider>
+            </RequireAccess>
+          </ProtectedRoute>
         }
       >
         <Route index element={<SettingsPage />} />
@@ -48,9 +55,11 @@ function AppRoutes() {
       <Route
         element={
           <ProtectedRoute>
-            <AppProvider>
-              <AppLayout />
-            </AppProvider>
+            <RequireAccess>
+              <AppProvider>
+                <AppLayout />
+              </AppProvider>
+            </RequireAccess>
           </ProtectedRoute>
         }
       >
@@ -62,8 +71,7 @@ function AppRoutes() {
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/products" element={<ProductsPage />} />
       </Route>
-      <Route path="/" element={<Navigate to="/scanner" replace />} />
-      <Route path="*" element={<Navigate to="/scanner" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
