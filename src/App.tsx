@@ -14,6 +14,7 @@ import PackagesPage from '@/pages/Packages';
 import OrdersPage from '@/pages/Orders';
 import ProductsPage from '@/pages/Products';
 import PackageDetails from '@/pages/PackageDetails';
+import HealthPage from '@/pages/Health';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -70,6 +71,7 @@ function AppRoutes() {
         <Route path="/package/:id" element={<PackageDetails />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/products" element={<ProductsPage />} />
+        <Route path="/health" element={<HealthPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
