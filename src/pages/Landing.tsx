@@ -63,8 +63,8 @@ export default function LandingPage() {
             <span className="text-lg font-bold tracking-tight">Bip Certo</span>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>Entrar</Button>
-            <Button size="sm" onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => { console.log('go login'); navigate('/login'); }}>Entrar</Button>
+            <Button type="button" size="sm" onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}>
               Começar agora
             </Button>
           </div>
@@ -73,7 +73,7 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" aria-hidden="true" />
         <div className="max-w-4xl mx-auto px-6 pt-24 pb-20 text-center relative">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8">
             <Zap className="w-4 h-4" /> Sistema de conferência de pacotes
@@ -86,10 +86,10 @@ export default function LandingPage() {
             Bipe etiquetas e descubra instantaneamente o que tem dentro de cada pacote. Conferência rápida para Shopee, Mercado Livre e SHEIN.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button size="lg" className="text-base px-8 h-12 shadow-lg" onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}>
+            <Button type="button" size="lg" className="text-base px-8 h-12 shadow-lg" onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}>
               Começar agora
             </Button>
-            <Button variant="outline" size="lg" className="text-base px-8 h-12" onClick={() => navigate('/login')}>
+            <Button type="button" variant="outline" size="lg" className="text-base px-8 h-12" onClick={() => { console.log('go login'); navigate('/login'); }}>
               Já tenho conta
             </Button>
           </div>
