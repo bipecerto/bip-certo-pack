@@ -2,7 +2,7 @@
  * detect.ts — Detecção automática de marketplace pelo cabeçalho do CSV.
  */
 
-export type Marketplace = 'shopee' | 'aliexpress' | 'shein' | 'unknown';
+export type Marketplace = 'shopee' | 'mercadolivre' | 'shein' | 'unknown';
 
 /** Normaliza um header: Remove espaços extras, lowercase */
 function normalize(h: string): string {
@@ -18,13 +18,13 @@ export function detectMarketplace(headers: string[]): Marketplace {
         return 'shopee';
     }
 
-    // AliExpress: tem "order id" + "sku" + algum tracking
+    // Mercado Livre (antigo AliExpress): tem "order id" + "sku" + algum tracking
     if (
         has('order id') &&
         has('sku') &&
         (has('logistics tracking') || has('tracking no') || has('tracking number'))
     ) {
-        return 'aliexpress';
+        return 'mercadolivre';
     }
 
     // SHEIN: tem "order number" (não order id) + ("variation" ou "color/size") + tracking

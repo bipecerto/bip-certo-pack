@@ -146,7 +146,7 @@ export default function ImportsPage() {
     <div className="p-6 max-w-3xl space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-foreground">Importação de Pedidos</h2>
-        <p className="text-muted-foreground text-sm mt-1">Importe CSVs oficiais da Shopee, AliExpress ou SHEIN.</p>
+        <p className="text-muted-foreground text-sm mt-1">Importe CSVs oficiais da Shopee, Mercado Livre ou SHEIN.</p>
       </div>
 
       <div
@@ -163,7 +163,7 @@ export default function ImportsPage() {
         {uploading ? <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" /> : <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />}
         <p className="text-foreground font-medium text-lg">{uploading ? 'Enviando arquivo...' : 'Arraste o CSV aqui'}</p>
         <p className="text-muted-foreground text-sm mt-1">ou clique para selecionar</p>
-        <p className="text-muted-foreground/60 text-xs mt-3">Shopee · AliExpress · SHEIN</p>
+        <p className="text-muted-foreground/60 text-xs mt-3">Shopee · Mercado Livre · SHEIN</p>
         <input ref={fileInputRef} type="file" accept=".csv" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) processFile(file); if (fileInputRef.current) fileInputRef.current.value = ''; }} />
       </div>
 
@@ -190,7 +190,7 @@ export default function ImportsPage() {
                         <div className="font-medium text-sm truncate">{fileName}</div>
                         <div className="text-xs text-muted-foreground flex gap-2 flex-wrap">
                           <span>{new Date(job.created_at).toLocaleString()}</span>
-                          {job.marketplace && job.marketplace !== 'unknown' && <span className="uppercase font-semibold text-primary">{job.marketplace}</span>}
+                          {job.marketplace && job.marketplace !== 'unknown' && <span className="uppercase font-semibold text-primary">{job.marketplace === 'aliexpress' ? 'Mercado Livre' : job.marketplace === 'mercadolivre' ? 'Mercado Livre' : job.marketplace}</span>}
                         </div>
                       </div>
                     </div>

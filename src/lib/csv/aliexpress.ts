@@ -1,5 +1,5 @@
 /**
- * aliexpress.ts — Mapper de linhas CSV do AliExpress para o modelo interno.
+ * aliexpress.ts — Mapper de linhas CSV do Mercado Livre para o modelo interno.
  */
 
 import { findHeader } from './parse';

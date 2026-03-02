@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const steps = [
-  { icon: FileSpreadsheet, title: 'Importe seus pedidos', desc: 'Faça upload do CSV da Shopee, AliExpress ou SHEIN em segundos.' },
+  { icon: FileSpreadsheet, title: 'Importe seus pedidos', desc: 'Faça upload do CSV da Shopee, Mercado Livre ou SHEIN em segundos.' },
   { icon: ScanLine, title: 'Bipe a etiqueta', desc: 'Use câmera, leitor USB/Bluetooth ou digite o código manualmente.' },
   { icon: ShieldCheck, title: 'Confira e envie', desc: 'Veja o conteúdo do pacote instantaneamente e evite erros.' },
 ];
@@ -20,7 +20,7 @@ const plans = [
   {
     name: 'Starter',
     price: 197,
-    features: ['Importação CSV (Shopee, AliExpress, SHEIN)', 'Scanner câmera e leitor USB/BT', 'Busca por pacote e pedido', '1 loja (1 empresa)', 'Histórico de conferências'],
+    features: ['Importação CSV (Shopee, Mercado Livre, SHEIN)', 'Scanner câmera e leitor USB/BT', 'Busca por pacote e pedido', '1 loja (1 empresa)', 'Histórico de conferências'],
     highlight: false,
     plan: 'starter',
   },
@@ -34,7 +34,7 @@ const plans = [
 ];
 
 const faqs = [
-  { q: 'Funciona com qual marketplace?', a: 'Shopee, AliExpress e SHEIN. Estamos adicionando mais em breve.' },
+  { q: 'Funciona com qual marketplace?', a: 'Shopee, Mercado Livre e SHEIN. Estamos adicionando mais em breve.' },
   { q: 'Preciso de leitor de código de barras?', a: 'Não é obrigatório. Você pode usar a câmera do celular ou digitar o código manualmente.' },
   { q: 'Posso cancelar a qualquer momento?', a: 'Sim. Sem fidelidade e sem multa.' },
   { q: 'Como funciona o acesso multiusuário?', a: 'No plano Pro, você pode convidar membros da equipe para acessar o sistema da mesma empresa.' },
@@ -83,7 +83,7 @@ export default function LandingPage() {
             <span className="text-primary">produto errado.</span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            Bipe etiquetas e descubra instantaneamente o que tem dentro de cada pacote. Conferência rápida para Shopee, AliExpress e SHEIN.
+            Bipe etiquetas e descubra instantaneamente o que tem dentro de cada pacote. Conferência rápida para Shopee, Mercado Livre e SHEIN.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button size="lg" className="text-base px-8 h-12 shadow-lg" onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}>
