@@ -9,6 +9,7 @@ import {
     Box,
     Settings,
     Zap,
+    HeartPulse,
 } from 'lucide-react';
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
     { to: '/orders', icon: ShoppingCart, label: 'Pedidos' },
     { to: '/products', icon: Box, label: 'Produtos' },
     { to: '/settings', icon: Settings, label: 'Configurações' },
+    { to: '/health', icon: HeartPulse, label: 'Health Check' },
 ];
 
 export function Sidebar() {
