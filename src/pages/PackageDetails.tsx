@@ -50,8 +50,16 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 
 const MARKETPLACE_BADGE: Record<string, string> = {
     shopee: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
-    aliexpress: 'bg-red-500/10 text-red-600 border-red-500/20',
+    mercadolivre: 'bg-green-500/10 text-green-600 border-green-500/20',
+    aliexpress: 'bg-green-500/10 text-green-600 border-green-500/20',
     shein: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
+};
+
+const MKT_LABEL: Record<string, string> = {
+    shopee: 'Shopee',
+    mercadolivre: 'Mercado Livre',
+    aliexpress: 'Mercado Livre',
+    shein: 'SHEIN',
 };
 
 export default function PackageDetails() {
@@ -166,7 +174,7 @@ export default function PackageDetails() {
                     <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Pedido</h3>
                         <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', MARKETPLACE_BADGE[pkg.order.marketplace] || 'bg-muted text-muted-foreground')}>
-                            {pkg.order.marketplace.toUpperCase()}
+                            {MKT_LABEL[pkg.order.marketplace] || pkg.order.marketplace.toUpperCase()}
                         </span>
                     </div>
                     <div className="space-y-2">

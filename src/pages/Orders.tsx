@@ -25,11 +25,19 @@ interface OrderRow {
 
 const MKT_COLOR: Record<string, string> = {
   shopee: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
-  aliexpress: 'bg-red-500/10 text-red-600 border-red-500/20',
+  mercadolivre: 'bg-green-500/10 text-green-600 border-green-500/20',
+  aliexpress: 'bg-green-500/10 text-green-600 border-green-500/20',
   shein: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
 };
 
-const MARKETPLACE_FILTERS = ['all', 'shopee', 'aliexpress', 'shein'];
+const MKT_LABEL: Record<string, string> = {
+  shopee: 'Shopee',
+  mercadolivre: 'Mercado Livre',
+  aliexpress: 'Mercado Livre',
+  shein: 'SHEIN',
+};
+
+const MARKETPLACE_FILTERS = ['all', 'shopee', 'mercadolivre', 'shein'];
 
 export default function OrdersPage() {
   const { profile } = useApp();
@@ -53,7 +61,13 @@ export default function OrdersPage() {
         .eq('company_id', profile.company_id)
         .order('created_at', { ascending: false })
         .limit(200);
-      if (mktFilter !== 'all') q = q.eq('marketplace', mktFilter);
+      if (mktFilter !== 'all') {
+        if (mktFilter === 'mercadolivre') {
+          q = q.in('marketplace', ['mercadolivre', 'aliexpress']);
+        } else {
+          q = q.eq('marketplace', mktFilter);
+        }
+      }
       if (search.trim()) q = q.or(`external_order_id.ilike.%${search.trim()}%,customer_name.ilike.%${search.trim()}%`);
       const { data, error } = await q;
       if (error) throw error;
@@ -111,7 +125,7 @@ export default function OrdersPage() {
         <div className="flex gap-2">
           {MARKETPLACE_FILTERS.map((m) => (
             <button key={m} onClick={() => setMktFilter(m)} className={cn('text-xs font-semibold px-3 py-1.5 rounded-full border transition-all capitalize', mktFilter === m ? (m === 'all' ? 'bg-primary border-primary text-primary-foreground' : MKT_COLOR[m] + ' ring-1 ring-current') : 'bg-muted border-border text-muted-foreground hover:text-foreground')}>
-              {m === 'all' ? 'Todos' : m}
+              {m === 'all' ? 'Todos' : (MKT_LABEL[m] || m)}
             </button>
           ))}
         </div>
@@ -132,7 +146,7 @@ export default function OrdersPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm text-foreground">{order.external_order_id}</span>
-                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', MKT_COLOR[order.marketplace] || 'bg-muted text-muted-foreground')}>{order.marketplace.toUpperCase()}</span>
+                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', MKT_COLOR[order.marketplace] || 'bg-muted text-muted-foreground')}>{MKT_LABEL[order.marketplace] || order.marketplace.toUpperCase()}</span>
                       {order.packages?.length > 0 && <span className="text-xs text-muted-foreground">{order.packages.length} pacote(s)</span>}
                     </div>
                     {order.customer_name && <p className="text-xs text-muted-foreground mt-0.5">{order.customer_name}</p>}

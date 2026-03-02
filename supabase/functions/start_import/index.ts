@@ -62,13 +62,13 @@ function findH(headers: string[], candidates: string[]): string | undefined {
   return headers.find(h => nc.includes(norm(h)))
 }
 
-type Marketplace = 'shopee' | 'aliexpress' | 'shein' | 'unknown'
+type Marketplace = 'shopee' | 'mercadolivre' | 'shein' | 'unknown'
 
 function detectMarketplace(headers: string[]): Marketplace {
   const n = headers.map(h => h.trim().toLowerCase())
   const has = (t: string) => n.some(h => h.includes(t))
   if (has('order id') && has('tracking number') && (has('model name') || has('variation'))) return 'shopee'
-  if (has('order id') && has('sku') && (has('logistics tracking') || has('tracking no') || has('tracking number'))) return 'aliexpress'
+  if (has('order id') && has('sku') && (has('logistics tracking') || has('tracking no') || has('tracking number'))) return 'mercadolivre'
   if ((has('order number') || has('order no')) && (has('variation') || has('size') || has('colour')) && (has('tracking') || has('waybill'))) return 'shein'
   return 'unknown'
 }
@@ -89,7 +89,7 @@ function mapRow(row: Record<string, string>, headers: string[], marketplace: Mar
     variation = get(['Model Name', 'Variation Name', 'Variation'])
     qtyStr = get(['Quantity', 'Qty'])
     address = get(['Recipient Address', 'Delivery Address', 'Shipping Address'])
-  } else if (marketplace === 'aliexpress') {
+  } else if (marketplace === 'mercadolivre') {
     orderId = get(['Order ID', 'Order No', 'Order Number'])
     tracking = get(['Logistics Tracking Number', 'Tracking Number', 'Tracking No'])
     buyer = get(['Buyer Login Name', 'Buyer Name', 'Customer Name'])

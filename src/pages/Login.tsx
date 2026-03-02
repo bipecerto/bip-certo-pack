@@ -7,31 +7,22 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
-    const { user, signIn, signUp } = useAuth();
+    const { user, signIn } = useAuth();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
     const [showPass, setShowPass] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [mode, setMode] = useState<'login' | 'signup'>('login');
 
     if (user) return <Navigate to="/scanner" replace />;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        if (mode === 'login') {
-            const { error } = await signIn(email, password);
-            setLoading(false);
-            if (error) toast.error('Falha no login: ' + error);
-            else { toast.success('Login realizado!'); navigate('/scanner'); }
-        } else {
-            const { error } = await signUp(email, password, name);
-            setLoading(false);
-            if (error) toast.error('Erro no cadastro: ' + error);
-            else toast.success('Conta criada! Verifique seu email para confirmar.');
-        }
+        const { error } = await signIn(email, password);
+        setLoading(false);
+        if (error) toast.error('Falha no login: ' + error);
+        else { toast.success('Login realizado!'); navigate('/scanner'); }
     };
 
     return (
@@ -46,21 +37,9 @@ export default function LoginPage() {
                 </div>
 
                 <div className="bg-card border border-border rounded-2xl p-6 shadow-2xl">
-                    <h2 className="text-lg font-semibold text-foreground mb-5">
-                        {mode === 'login' ? 'Entrar' : 'Criar Conta'}
-                    </h2>
+                    <h2 className="text-lg font-semibold text-foreground mb-5">Entrar</h2>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        {mode === 'signup' && (
-                            <div>
-                                <label className="block text-sm text-muted-foreground mb-1.5">Nome</label>
-                                <Input
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="Seu nome"
-                                />
-                            </div>
-                        )}
                         <div>
                             <label className="block text-sm text-muted-foreground mb-1.5">Email</label>
                             <Input
@@ -93,23 +72,9 @@ export default function LoginPage() {
                         </div>
 
                         <Button type="submit" disabled={loading} className="w-full">
-                            {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar Conta'}
+                            {loading ? 'Aguarde...' : 'Entrar'}
                         </Button>
                     </form>
-
-                    <p className="text-center text-xs text-muted-foreground mt-4">
-                        {mode === 'login' ? (
-                            <>Sem conta?{' '}
-                            <button onClick={() => setMode('signup')} className="text-primary hover:underline">
-                                Criar conta
-                            </button></>
-                        ) : (
-                            <>Já tem conta?{' '}
-                            <button onClick={() => setMode('login')} className="text-primary hover:underline">
-                                Entrar
-                            </button></>
-                        )}
-                    </p>
                 </div>
             </div>
         </div>
